@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地办公工作台 - 待办任务</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>办公工作台</h1>
+                <p>Office Workbench</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item">
+                    <span class="nav-icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="/todo" class="nav-item active">
+                    <span class="nav-icon">📋</span>
+                    <span>待办任务</span>
+                </a>
+                <a href="/memo" class="nav-item">
+                    <span class="nav-icon">📝</span>
+                    <span>工作备忘录</span>
+                </a>
+                <a href="/focus" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    <span>重点关注</span>
+                </a>
+                <a href="/report" class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>部门报告库</span>
+                </a>
+                <a href="/config" class="nav-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统配置</span>
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">待办任务管理</h1>
+                <p class="page-desc">管理您的待办事项，支持多条件检索和附件上传</p>
+            </div>
+            
+            <!-- 搜索筛选栏 -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="filter-bar">
+                        <input type="text" id="searchInput" class="form-control search-input" placeholder="搜索任务内容...">
+                        <select id="filterTag" class="form-control">
+                            <option value="">全部标签</option>
+                        </select>
+                        <select id="filterTeam" class="form-control">
+                            <option value="">全部团队</option>
+                        </select>
+                        <select id="filterPerson" class="form-control">
+                            <option value="">全部人员</option>
+                        </select>
+                        <select id="filterStatus" class="form-control">
+                            <option value="active">未完成</option>
+                            <option value="completed">已完成</option>
+                            <option value="">全部</option>
+                        </select>
+                        <select id="filterSort" class="form-control">
+                            <option value="created_desc">创建时间倒序</option>
+                            <option value="created_asc">创建时间正序</option>
+                            <option value="deadline_asc">截止时间正序</option>
+                            <option value="deadline_desc">截止时间倒序</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="TodoModule.openCreateModal()">新建任务</button>
+                        <button class="btn btn-secondary" onclick="printPage()">打印</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 任务列表 -->
+            <div id="taskList"></div>
+        </main>
+    </div>
+    
+    <!-- 新建/编辑任务模态框 -->
+    <div class="modal-overlay" id="taskModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">新建任务</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <!-- 核心字段 -->
+                    <div class="form-group">
+                        <label class="form-label">任务摘要 *</label>
+                        <input type="text" id="taskSummary" class="form-control" placeholder="请输入任务摘要" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">截止时间</label>
+                            <input type="datetime-local" id="taskDeadline" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">任务标签</label>
+                            <select id="taskTag" class="form-control"></select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">指派团队</label>
+                            <select id="taskTeam" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">指派个人</label>
+                            <select id="taskPerson" class="form-control"></select>
+                        </div>
+                    </div>
+                    
+                    <!-- 扩展字段（折叠区） -->
+                    <div class="collapse-panel open">
+                        <div class="collapse-header">
+                            <span>扩展字段</span>
+                            <span class="collapse-icon">▼</span>
+                        </div>
+                        <div class="collapse-content">
+                            <div class="form-group">
+                                <label class="form-label">详细内容</label>
+                                <textarea id="taskDetail" class="form-control" rows="4" placeholder="请输入任务详细内容"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">进度备注</label>
+                                <textarea id="taskProgress" class="form-control" rows="3" placeholder="请输入进度备注"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('taskModal')">取消</button>
+                <button class="btn btn-primary" onclick="TodoModule.saveTask()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

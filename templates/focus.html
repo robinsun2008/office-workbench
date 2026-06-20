@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地办公工作台 - 重点关注看板</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>办公工作台</h1>
+                <p>Office Workbench</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item">
+                    <span class="nav-icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="/todo" class="nav-item">
+                    <span class="nav-icon">📋</span>
+                    <span>待办任务</span>
+                </a>
+                <a href="/memo" class="nav-item">
+                    <span class="nav-icon">📝</span>
+                    <span>工作备忘录</span>
+                </a>
+                <a href="/focus" class="nav-item active">
+                    <span class="nav-icon">📊</span>
+                    <span>重点关注</span>
+                </a>
+                <a href="/report" class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>部门报告库</span>
+                </a>
+                <a href="/config" class="nav-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统配置</span>
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">重点关注看板</h1>
+                <p class="page-desc">可视化展示所有关注领域及事项状态，自动隐藏完成超过1个月的历史事项</p>
+            </div>
+            
+            <!-- 搜索筛选栏 -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="filter-bar">
+                        <input type="text" id="focusSearchInput" class="form-control search-input" placeholder="搜索事项...">
+                        <select id="focusStatusFilter" class="form-control">
+                            <option value="">全部状态</option>
+                            <option value="未开始">未开始</option>
+                            <option value="进行中">进行中</option>
+                            <option value="完成">完成</option>
+                            <option value="延期">延期</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="FocusModule.openCreateAreaModal()">新建领域</button>
+                        <button class="btn btn-secondary" onclick="printPage()">打印</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 看板区域 -->
+            <div id="kanbanBoard" class="kanban-board"></div>
+        </main>
+    </div>
+    
+    <!-- 新建/编辑领域模态框 -->
+    <div class="modal-overlay" id="areaModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="areaModalTitle">新建关注领域</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="areaForm">
+                    <div class="form-group">
+                        <label class="form-label">领域名称 *</label>
+                        <input type="text" id="areaName" class="form-control" placeholder="请输入领域名称" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">领域描述</label>
+                        <textarea id="areaDescription" class="form-control" rows="3" placeholder="请输入领域描述"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('areaModal')">取消</button>
+                <button class="btn btn-primary" onclick="FocusModule.saveArea()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 新建/编辑事项模态框 -->
+    <div class="modal-overlay" id="itemModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="itemModalTitle">新建关注事项</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="itemForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">所属领域 *</label>
+                            <select id="itemArea" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">事项状态</label>
+                            <select id="itemStatus" class="form-control">
+                                <option value="未开始">未开始</option>
+                                <option value="进行中">进行中</option>
+                                <option value="完成">完成</option>
+                                <option value="延期">延期</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">事项标题 * (≤40字)</label>
+                        <input type="text" id="itemTitle" class="form-control" placeholder="请输入事项标题，不超过40个字符" maxlength="40" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">计划完成时间</label>
+                        <input type="date" id="itemPlannedDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">长文本备注</label>
+                        <textarea id="itemNote" class="form-control" rows="6" placeholder="请输入备注内容，支持数千字"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('itemModal')">取消</button>
+                <button class="btn btn-primary" onclick="FocusModule.saveItem()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

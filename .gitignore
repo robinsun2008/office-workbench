@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# 数据库文件（包含用户数据，不建议上传）
+data/*.db
+data/*.sqlite
+
+# 上传的附件文件（用户数据）
+uploads/
+
+# SSL证书（安全敏感）
+ssl/
+*.key
+*.crt
+*.pem
+
+# IDE配置
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 导出的数据文件
+*.zip
+
+# 环境变量（如有）
+.env

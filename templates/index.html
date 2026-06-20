@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地办公工作台 - 首页</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>办公工作台</h1>
+                <p>Office Workbench</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item active">
+                    <span class="nav-icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="/todo" class="nav-item">
+                    <span class="nav-icon">📋</span>
+                    <span>待办任务</span>
+                </a>
+                <a href="/memo" class="nav-item">
+                    <span class="nav-icon">📝</span>
+                    <span>工作备忘录</span>
+                </a>
+                <a href="/focus" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    <span>重点关注</span>
+                </a>
+                <a href="/report" class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>部门报告库</span>
+                </a>
+                <a href="/config" class="nav-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统配置</span>
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">工作台首页</h1>
+                <p class="page-desc">欢迎使用本地办公工作台，以下是您的工作概览</p>
+            </div>
+            
+            <!-- 即将到期任务提醒 -->
+            <div id="upcomingTasks"></div>
+            
+            <!-- 快捷入口 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">快捷入口</h2>
+                </div>
+                <div class="card-body">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                        <a href="/todo" class="btn btn-primary" style="text-decoration: none;">
+                            <span>📋</span> 待办任务
+                        </a>
+                        <a href="/memo" class="btn btn-primary" style="text-decoration: none;">
+                            <span>📝</span> 工作备忘录
+                        </a>
+                        <a href="/focus" class="btn btn-primary" style="text-decoration: none;">
+                            <span>📊</span> 重点关注
+                        </a>
+                        <a href="/report" class="btn btn-primary" style="text-decoration: none;">
+                            <span>📄</span> 部门报告库
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 数据管理 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">数据管理</h2>
+                </div>
+                <div class="card-body">
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="exportAllData()">导出全部数据</button>
+                        <button class="btn btn-secondary" onclick="importData()">导入数据</button>
+                        <button class="btn btn-secondary" onclick="exportAttachments()">导出附件</button>
+                    </div>
+                    <p class="text-muted mt-2" style="font-size: 12px;">
+                        导出功能将生成ZIP文件，包含所有业务数据和附件；导入功能可恢复之前导出的数据。
+                    </p>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
