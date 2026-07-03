@@ -292,7 +292,7 @@ const TodoModule = {
         }
         
         container.innerHTML = this.tasks.map(task => `
-            <div class="card task-card compact" data-id="${task.id}">
+            <div class="card task-card compact" data-id="${task.id}" onclick="toggleCollapse(${task.id})">
                 <div class="card-body">
                     <div class="task-header">
                         <div class="task-main">
@@ -302,34 +302,27 @@ const TodoModule = {
                         </div>
                         <div class="task-meta">
                             ${task.deadline ? `<span class="task-deadline">${formatDate(task.deadline)}</span>` : ''}
+                            <span class="expand-icon">▶</span>
                             <div class="btn-group btn-group-sm">
-                                ${task.status === '未完成' ? `<button class="btn btn-success btn-sm" onclick="TodoModule.completeTask(${task.id})">完成</button>` : ''}
-                                <button class="btn btn-secondary btn-sm" onclick="TodoModule.editTask(${task.id})">编辑</button>
-                                <button class="btn btn-danger btn-sm" onclick="TodoModule.deleteTask(${task.id})">删除</button>
+                                ${task.status === '未完成' ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); TodoModule.completeTask(${task.id})">完成</button>` : ''}
+                                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); TodoModule.editTask(${task.id})">编辑</button>
+                                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); TodoModule.deleteTask(${task.id})">删除</button>
                             </div>
                         </div>
                     </div>
-                    <div class="collapse-panel" id="collapse-${task.id}">
-                        <div class="collapse-header" onclick="toggleCollapse(${task.id})">
-                            <span>展开详情</span>
-                            <span class="collapse-icon">▼</span>
+                    <div class="collapse-content" id="collapse-${task.id}">
+                        ${task.detail_content ? `<p><strong>详细内容：</strong>${task.detail_content}</p>` : ''}
+                        ${task.deadline ? `<p><strong>截止时间：</strong>${formatDateTime(task.deadline)}</p>` : ''}
+                        ${task.assigned_team ? `<p><strong>指派团队：</strong>${task.assigned_team}</p>` : ''}
+                        ${task.assigned_person ? `<p><strong>指派个人：</strong>${task.assigned_person}</p>` : ''}
+                        ${task.progress_note ? `<p><strong>进度备注：</strong>${task.progress_note}</p>` : ''}
+                        <p class="text-muted" style="font-size: 12px;">创建时间：${formatDateTime(task.created_at)}</p>
+                        <div class="mt-2">
+                            <strong>附件：</strong>
+                            <div id="attachments-${task.id}"></div>
+                            <input type="file" id="file-${task.id}" style="display:none" onchange="TodoModule.uploadAttachment(${task.id}, this)">
+                            <button class="btn btn-secondary btn-sm mt-1" onclick="event.stopPropagation(); document.getElementById('file-${task.id}').click()">上传附件</button>
                         </div>
-                        <div class="collapse-content">
-                            ${task.detail_content ? `<p><strong>详细内容：</strong>${task.detail_content}</p>` : ''}
-                            ${task.deadline ? `<p><strong>截止时间：</strong>${formatDateTime(task.deadline)}</p>` : ''}
-                            ${task.assigned_team ? `<p><strong>指派团队：</strong>${task.assigned_team}</p>` : ''}
-                            ${task.assigned_person ? `<p><strong>指派个人：</strong>${task.assigned_person}</p>` : ''}
-                            ${task.progress_note ? `<p><strong>进度备注：</strong>${task.progress_note}</p>` : ''}
-                            <div class="mt-2">
-                                <strong>附件：</strong>
-                                <div id="attachments-${task.id}"></div>
-                                <input type="file" id="file-${task.id}" style="display:none" onchange="TodoModule.uploadAttachment(${task.id}, this)">
-                                <button class="btn btn-secondary btn-sm mt-1" onclick="document.getElementById('file-${task.id}').click()">上传附件</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-muted mt-1" style="font-size: 12px;">
-                        创建时间：${formatDateTime(task.created_at)}
                     </div>
                 </div>
             </div>
@@ -1430,9 +1423,10 @@ function downloadFile(attachmentId) {
 
 // ==================== 折叠面板切换 ====================
 function toggleCollapse(id) {
-    const panel = document.getElementById(`collapse-${id}`);
-    if (panel) {
-        panel.classList.toggle('open');
+    const collapse = document.getElementById(`collapse-${id}`);
+    if (collapse) {
+        const cardBody = collapse.parentElement;
+        cardBody.classList.toggle('open');
     }
 }
 
