@@ -47,6 +47,10 @@
             <div class="page-header">
                 <h1 class="page-title">工作台首页</h1>
                 <p class="page-desc">欢迎使用本地办公工作台，以下是您的工作概览</p>
+                <div class="header-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="openChangePasswordModal()">修改密码</button>
+                    <button class="btn btn-danger btn-sm" onclick="logout()">退出登录</button>
+                </div>
             </div>
             
             <!-- 即将到期任务提醒 -->
@@ -85,13 +89,44 @@
                         <button class="btn btn-success" onclick="exportAllData()">导出全部数据</button>
                         <button class="btn btn-secondary" onclick="importData()">导入数据</button>
                         <button class="btn btn-secondary" onclick="exportAttachments()">导出附件</button>
+                        <button class="btn btn-info" onclick="exportTextSummary()">导出文本汇总</button>
                     </div>
                     <p class="text-muted mt-2" style="font-size: 12px;">
-                        导出功能将生成ZIP文件，包含所有业务数据和附件；导入功能可恢复之前导出的数据。
+                        导出功能将生成ZIP文件，包含所有业务数据和附件；导入功能可恢复之前导出的数据。文本汇总将导出为单一TXT文件。
                     </p>
                 </div>
             </div>
         </main>
+    </div>
+    
+    <!-- 修改密码模态框 -->
+    <div class="modal-overlay" id="changePasswordModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>修改密码</h3>
+                <button class="modal-close" onclick="closeModal('changePasswordModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <form onsubmit="handleChangePassword(event)">
+                    <div class="form-group">
+                        <label>原密码</label>
+                        <input type="password" id="oldPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label>新密码</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <div class="form-group">
+                        <label>确认新密码</label>
+                        <input type="password" id="confirmPassword" required>
+                    </div>
+                    <div class="btn-group mt-4">
+                        <button type="submit" class="btn btn-primary">确认修改</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('changePasswordModal')">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
     
     <script src="/static/js/app.js"></script>

@@ -114,6 +114,16 @@ def init_database():
         )
     ''')
     
+    # ==================== 8. 系统安全表（密码存储） ====================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS system_security (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            password_hash TEXT NOT NULL,       -- 加密后的密码
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # ==================== 插入默认配置数据 ====================
     # 检查是否已有配置数据
     cursor.execute("SELECT COUNT(*) FROM system_config")
@@ -133,6 +143,14 @@ def init_database():
         # 默认关注领域
         default_areas = [('focus_area', '项目进度'), ('focus_area', '团队建设'), ('focus_area', '业务拓展')]
         cursor.executemany("INSERT INTO system_config (config_type, config_value) VALUES (?, ?)", default_areas)
+    
+    # ==================== 设置默认密码（首次初始化时） ====================
+    cursor.execute("SELECT COUNT(*) FROM system_security")
+    if cursor.fetchone()[0] == 0:
+        import hashlib
+        default_password_hash = hashlib.sha256('admin123'.encode('utf-8')).hexdigest()
+        cursor.execute("INSERT INTO system_security (password_hash) VALUES (?)", (default_password_hash,))
+        print("默认密码已设置: admin123")
     
     conn.commit()
     conn.close()

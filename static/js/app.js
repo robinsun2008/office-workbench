@@ -6,6 +6,71 @@
 // ==================== API基础配置 ====================
 const API_BASE = '/api';
 
+// ==================== 认证状态管理 ====================
+let isAuthenticated = false;
+
+async function checkAuth() {
+    const result = await apiRequest('/check_auth');
+    if (result.code === 0 && result.authenticated) {
+        isAuthenticated = true;
+    } else {
+        isAuthenticated = false;
+    }
+    return isAuthenticated;
+}
+
+async function login(password) {
+    const result = await apiRequest('/login', 'POST', { password });
+    if (result.code === 0) {
+        isAuthenticated = true;
+        showMessage('登录成功', 'success');
+        location.reload();
+    } else {
+        showMessage(result.message || '登录失败', 'error');
+    }
+}
+
+async function logout() {
+    const result = await apiRequest('/logout', 'POST');
+    if (result.code === 0) {
+        isAuthenticated = false;
+        location.href = '/login';
+    }
+}
+
+async function changePassword(oldPassword, newPassword) {
+    const result = await apiRequest('/change_password', 'POST', { old_password: oldPassword, new_password: newPassword });
+    if (result.code === 0) {
+        showMessage('密码修改成功', 'success');
+        closeAllModals();
+    } else {
+        showMessage(result.message || '修改失败', 'error');
+    }
+}
+
+function openChangePasswordModal() {
+    openModal('changePasswordModal');
+}
+
+function handleChangePassword(e) {
+    e.preventDefault();
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    if (newPassword !== confirmPassword) {
+        showMessage('两次输入的密码不一致', 'error');
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        showMessage('密码长度不能少于6位', 'error');
+        return;
+    }
+    
+    changePassword(oldPassword, newPassword);
+}
+
 // ==================== 工具函数 ====================
 /**
  * 发送API请求
@@ -24,7 +89,15 @@ async function apiRequest(url, method = 'GET', data = null) {
     
     try {
         const response = await fetch(API_BASE + url, options);
-        return await response.json();
+        const result = await response.json();
+        
+        if (result.code === 401) {
+            isAuthenticated = false;
+            location.href = '/login';
+            return { code: 401, message: '未授权' };
+        }
+        
+        return result;
     } catch (error) {
         console.error('API请求错误:', error);
         return { code: 1, message: '网络请求失败' };
@@ -202,7 +275,7 @@ const TodoModule = {
     },
     
     /**
-     * 渲染任务列表
+     * 渲染任务列表（紧凑布局）
      */
     renderTasks() {
         const container = document.getElementById('taskList');
@@ -219,31 +292,34 @@ const TodoModule = {
         }
         
         container.innerHTML = this.tasks.map(task => `
-            <div class="card task-card" data-id="${task.id}">
-                <div class="card-header">
-                    <div>
-                        <span class="tag ${getTagClass(task.tag)}">${task.tag || '一般'}</span>
-                        <span class="tag ${getStatusClass(task.status)}">${task.status}</span>
-                    </div>
-                    <div class="btn-group">
-                        ${task.status === '未完成' ? `<button class="btn btn-success btn-sm" onclick="TodoModule.completeTask(${task.id})">完成</button>` : ''}
-                        <button class="btn btn-secondary btn-sm" onclick="TodoModule.editTask(${task.id})">编辑</button>
-                        <button class="btn btn-danger btn-sm" onclick="TodoModule.deleteTask(${task.id})">删除</button>
-                    </div>
-                </div>
+            <div class="card task-card compact" data-id="${task.id}">
                 <div class="card-body">
-                    <h3 style="margin-bottom: 8px;">${task.summary}</h3>
+                    <div class="task-header">
+                        <div class="task-main">
+                            <span class="tag ${getTagClass(task.tag)}">${task.tag || '一般'}</span>
+                            <span class="tag ${getStatusClass(task.status)}">${task.status}</span>
+                            <span class="task-summary">${task.summary}</span>
+                        </div>
+                        <div class="task-meta">
+                            ${task.deadline ? `<span class="task-deadline">${formatDate(task.deadline)}</span>` : ''}
+                            <div class="btn-group btn-group-sm">
+                                ${task.status === '未完成' ? `<button class="btn btn-success btn-sm" onclick="TodoModule.completeTask(${task.id})">完成</button>` : ''}
+                                <button class="btn btn-secondary btn-sm" onclick="TodoModule.editTask(${task.id})">编辑</button>
+                                <button class="btn btn-danger btn-sm" onclick="TodoModule.deleteTask(${task.id})">删除</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="collapse-panel" id="collapse-${task.id}">
                         <div class="collapse-header" onclick="toggleCollapse(${task.id})">
-                            <span>详细信息</span>
+                            <span>展开详情</span>
                             <span class="collapse-icon">▼</span>
                         </div>
                         <div class="collapse-content">
-                            <p><strong>详细内容：</strong>${task.detail_content || '无'}</p>
-                            <p><strong>截止时间：</strong>${formatDateTime(task.deadline)}</p>
-                            <p><strong>指派团队：</strong>${task.assigned_team || '-'}</p>
-                            <p><strong>指派个人：</strong>${task.assigned_person || '-'}</p>
-                            <p><strong>进度备注：</strong>${task.progress_note || '无'}</p>
+                            ${task.detail_content ? `<p><strong>详细内容：</strong>${task.detail_content}</p>` : ''}
+                            ${task.deadline ? `<p><strong>截止时间：</strong>${formatDateTime(task.deadline)}</p>` : ''}
+                            ${task.assigned_team ? `<p><strong>指派团队：</strong>${task.assigned_team}</p>` : ''}
+                            ${task.assigned_person ? `<p><strong>指派个人：</strong>${task.assigned_person}</p>` : ''}
+                            ${task.progress_note ? `<p><strong>进度备注：</strong>${task.progress_note}</p>` : ''}
                             <div class="mt-2">
                                 <strong>附件：</strong>
                                 <div id="attachments-${task.id}"></div>
@@ -1018,9 +1094,72 @@ const ReportModule = {
                     <div style="white-space: pre-wrap; max-height: 80px; overflow: hidden;">
                         ${report.content ? report.content.substring(0, 150) + (report.content.length > 150 ? '...' : '') : '无内容'}
                     </div>
+                    <div class="mt-2">
+                        <div id="report-attachments-${report.id}"></div>
+                        <input type="file" id="report-file-${report.id}" style="display:none" onchange="ReportModule.uploadAttachment(${report.id}, this)">
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('report-file-${report.id}').click()">上传附件</button>
+                    </div>
                 </div>
             </div>
         `).join('');
+        
+        this.reports.forEach(report => this.loadAttachments(report.id));
+    },
+    
+    async loadAttachments(reportId) {
+        const result = await apiRequest(`/reports/${reportId}/attachments`);
+        const container = document.getElementById(`report-attachments-${reportId}`);
+        if (container && result.code === 0) {
+            container.innerHTML = result.data.length > 0 ? result.data.map(att => `
+                <div class="attachment-item">
+                    <span>
+                        <span class="attachment-name">${att.file_name}</span>
+                        <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
+                    </span>
+                    <span>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadFile(${att.id})">下载</button>
+                        <button class="btn btn-danger btn-sm" onclick="ReportModule.deleteAttachment(${att.id}, ${reportId})">删除</button>
+                    </span>
+                </div>
+            `).join('') : '';
+        }
+    },
+    
+    async uploadAttachment(reportId, input) {
+        const file = input.files[0];
+        if (!file) return;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch(`${API_BASE}/reports/${reportId}/attachments`, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (result.code === 0) {
+                showMessage('附件上传成功', 'success');
+                this.loadAttachments(reportId);
+            } else {
+                showMessage(result.message || '上传失败', 'error');
+            }
+        } catch (error) {
+            showMessage('上传失败', 'error');
+        }
+        
+        input.value = '';
+    },
+    
+    async deleteAttachment(attId, reportId) {
+        if (!confirm('确定要删除此附件吗？')) return;
+        
+        const result = await apiRequest(`/attachments/${attId}`, 'DELETE');
+        if (result.code === 0) {
+            showMessage('删除成功', 'success');
+            this.loadAttachments(reportId);
+        }
     },
     
     async filterReports() {
@@ -1208,7 +1347,7 @@ const HomeModule = {
             container.innerHTML = `
                 <div class="alert-card info">
                     <div class="alert-title">暂无即将到期的任务</div>
-                    <div class="alert-content">未来3天内没有待办任务到期</div>
+                    <div class="alert-content">未来5天内没有待办任务到期</div>
                 </div>
             `;
             return;
@@ -1217,7 +1356,7 @@ const HomeModule = {
         container.innerHTML = `
             <div class="alert-card warning">
                 <div class="alert-title">即将到期任务提醒</div>
-                <div class="alert-content">以下任务将在未来3天内到期，请及时处理</div>
+                <div class="alert-content">以下任务将在未来5天内到期，请及时处理</div>
             </div>
             ${tasks.map(task => `
                 <div class="card" style="margin-bottom: 12px;">
@@ -1277,6 +1416,11 @@ async function importData() {
 async function exportAttachments() {
     showMessage('正在导出附件...', 'info');
     window.location.href = '/api/export/attachments';
+}
+
+async function exportTextSummary() {
+    showMessage('正在导出文本汇总...', 'info');
+    window.location.href = '/api/export/text_summary';
 }
 
 // ==================== 下载文件 ====================

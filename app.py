@@ -8,9 +8,10 @@ import json
 import shutil
 import zipfile
 import tempfile
+import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, render_template, send_file, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_file, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import sqlite3
@@ -56,21 +57,17 @@ def save_uploaded_file(file, module_type, record_id):
     """保存上传的文件并记录到数据库"""
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
-        # 添加时间戳避免文件名冲突
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         unique_filename = f"{timestamp}_{filename}"
         
-        # 创建模块专属目录
         module_dir = os.path.join(app.config['UPLOAD_FOLDER'], module_type)
         os.makedirs(module_dir, exist_ok=True)
         
         file_path = os.path.join(module_dir, unique_filename)
         file.save(file_path)
         
-        # 获取文件大小
         file_size = os.path.getsize(file_path)
         
-        # 记录到数据库
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -88,11 +85,44 @@ def save_uploaded_file(file, module_type, record_id):
         }
     return None
 
+# ==================== 密码保护装饰器 ====================
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            return jsonify({'code': 401, 'message': '未授权，请先登录'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+def check_password(password):
+    """验证密码是否正确"""
+    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT password_hash FROM system_security")
+    result = cursor.fetchone()
+    conn.close()
+    return result and result['password_hash'] == password_hash
+
+def update_password(new_password):
+    """更新密码"""
+    password_hash = hashlib.sha256(new_password.encode('utf-8')).hexdigest()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE system_security SET password_hash = ?, updated_at = CURRENT_TIMESTAMP", (password_hash,))
+    conn.commit()
+    conn.close()
+
 # ==================== 页面路由 ====================
 @app.route('/')
 def index():
     """首页 - 展示近3天到期任务"""
     return render_template('index.html')
+
+@app.route('/login')
+def login_page():
+    """登录页面"""
+    return render_template('login.html')
 
 @app.route('/todo')
 def todo_page():
@@ -119,8 +149,52 @@ def config_page():
     """系统配置页面"""
     return render_template('config.html')
 
+# ==================== 登录认证API ====================
+@app.route('/api/login', methods=['POST'])
+def login():
+    """用户登录"""
+    data = request.get_json()
+    password = data.get('password', '')
+    
+    if check_password(password):
+        session['authenticated'] = True
+        session.permanent = True
+        return jsonify({'code': 0, 'message': '登录成功'})
+    return jsonify({'code': 1, 'message': '密码错误'})
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """用户登出"""
+    session.pop('authenticated', None)
+    return jsonify({'code': 0, 'message': '登出成功'})
+
+@app.route('/api/change_password', methods=['POST'])
+@requires_auth
+def change_password():
+    """修改密码"""
+    data = request.get_json()
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+    
+    if not check_password(old_password):
+        return jsonify({'code': 1, 'message': '原密码错误'})
+    
+    if len(new_password) < 4:
+        return jsonify({'code': 1, 'message': '新密码长度至少4位'})
+    
+    update_password(new_password)
+    return jsonify({'code': 0, 'message': '密码修改成功'})
+
+@app.route('/api/check_auth', methods=['GET'])
+def check_auth():
+    """检查登录状态"""
+    if session.get('authenticated'):
+        return jsonify({'code': 0, 'authenticated': True})
+    return jsonify({'code': 0, 'authenticated': False})
+
 # ==================== 待办任务API ====================
 @app.route('/api/tasks', methods=['GET'])
+@requires_auth
 def get_tasks():
     """获取待办任务列表，支持多条件检索"""
     conn = get_db_connection()
@@ -192,13 +266,14 @@ def get_tasks():
     return jsonify({'code': 0, 'data': tasks})
 
 @app.route('/api/tasks/upcoming', methods=['GET'])
+@requires_auth
 def get_upcoming_tasks():
-    """获取近3天内到期的任务（首页提醒用）"""
+    """获取近5天内到期的任务（首页提醒用）"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
     now = datetime.now()
-    three_days_later = now + timedelta(days=3)
+    five_days_later = now + timedelta(days=5)
     
     cursor.execute('''
         SELECT * FROM todo_tasks 
@@ -206,14 +281,17 @@ def get_upcoming_tasks():
         AND deadline IS NOT NULL 
         AND deadline >= ? 
         AND deadline <= ?
-        ORDER BY deadline ASC
-    ''', (now.strftime('%Y-%m-%d %H:%M:%S'), three_days_later.strftime('%Y-%m-%d %H:%M:%S')))
+        ORDER BY 
+            CASE tag WHEN '紧急' THEN 1 WHEN '重要' THEN 2 WHEN '一般' THEN 3 ELSE 4 END,
+            deadline ASC
+    ''', (now.strftime('%Y-%m-%d %H:%M:%S'), five_days_later.strftime('%Y-%m-%d %H:%M:%S')))
     
     tasks = rows_to_list(cursor.fetchall())
     conn.close()
     return jsonify({'code': 0, 'data': tasks})
 
 @app.route('/api/tasks', methods=['POST'])
+@requires_auth
 def create_task():
     """创建待办任务"""
     data = request.get_json()
@@ -240,6 +318,7 @@ def create_task():
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': task_id}})
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
+@requires_auth
 def update_task(task_id):
     """更新待办任务"""
     data = request.get_json()
@@ -267,6 +346,7 @@ def update_task(task_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
+@requires_auth
 def delete_task(task_id):
     """删除待办任务"""
     conn = get_db_connection()
@@ -287,6 +367,7 @@ def delete_task(task_id):
     return jsonify({'code': 0, 'message': '删除成功'})
 
 @app.route('/api/tasks/<int:task_id>/complete', methods=['POST'])
+@requires_auth
 def complete_task(task_id):
     """完成任务"""
     conn = get_db_connection()
@@ -297,6 +378,7 @@ def complete_task(task_id):
     return jsonify({'code': 0, 'message': '任务已完成'})
 
 @app.route('/api/tasks/<int:task_id>/attachments', methods=['POST'])
+@requires_auth
 def upload_task_attachment(task_id):
     """上传任务附件"""
     if 'file' not in request.files:
@@ -312,6 +394,7 @@ def upload_task_attachment(task_id):
     return jsonify({'code': 1, 'message': '文件类型不支持'})
 
 @app.route('/api/tasks/<int:task_id>/attachments', methods=['GET'])
+@requires_auth
 def get_task_attachments(task_id):
     """获取任务附件列表"""
     conn = get_db_connection()
@@ -322,6 +405,7 @@ def get_task_attachments(task_id):
     return jsonify({'code': 0, 'data': attachments})
 
 @app.route('/api/attachments/<int:attachment_id>/download', methods=['GET'])
+@requires_auth
 def download_attachment(attachment_id):
     """下载附件"""
     conn = get_db_connection()
@@ -335,6 +419,7 @@ def download_attachment(attachment_id):
     return jsonify({'code': 1, 'message': '文件不存在'})
 
 @app.route('/api/attachments/<int:attachment_id>', methods=['DELETE'])
+@requires_auth
 def delete_attachment(attachment_id):
     """删除附件"""
     conn = get_db_connection()
@@ -353,6 +438,7 @@ def delete_attachment(attachment_id):
 
 # ==================== 工作备忘录API ====================
 @app.route('/api/memos', methods=['GET'])
+@requires_auth
 def get_memos():
     """获取备忘录列表"""
     conn = get_db_connection()
@@ -387,6 +473,7 @@ def get_memos():
     return jsonify({'code': 0, 'data': memos})
 
 @app.route('/api/memos', methods=['POST'])
+@requires_auth
 def create_memo():
     """创建备忘录"""
     data = request.get_json()
@@ -404,6 +491,7 @@ def create_memo():
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': memo_id}})
 
 @app.route('/api/memos/<int:memo_id>', methods=['PUT'])
+@requires_auth
 def update_memo(memo_id):
     """更新备忘录"""
     data = request.get_json()
@@ -430,6 +518,7 @@ def update_memo(memo_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/memos/<int:memo_id>', methods=['DELETE'])
+@requires_auth
 def delete_memo(memo_id):
     """删除备忘录"""
     conn = get_db_connection()
@@ -450,6 +539,7 @@ def delete_memo(memo_id):
     return jsonify({'code': 0, 'message': '删除成功'})
 
 @app.route('/api/memos/<int:memo_id>/attachments', methods=['POST'])
+@requires_auth
 def upload_memo_attachment(memo_id):
     """上传备忘录附件"""
     if 'file' not in request.files:
@@ -465,6 +555,7 @@ def upload_memo_attachment(memo_id):
     return jsonify({'code': 1, 'message': '文件类型不支持'})
 
 @app.route('/api/memos/<int:memo_id>/attachments', methods=['GET'])
+@requires_auth
 def get_memo_attachments(memo_id):
     """获取备忘录附件列表"""
     conn = get_db_connection()
@@ -476,6 +567,7 @@ def get_memo_attachments(memo_id):
 
 # ==================== 重点关注看板API ====================
 @app.route('/api/focus/areas', methods=['GET'])
+@requires_auth
 def get_focus_areas():
     """获取所有关注领域"""
     conn = get_db_connection()
@@ -486,6 +578,7 @@ def get_focus_areas():
     return jsonify({'code': 0, 'data': areas})
 
 @app.route('/api/focus/areas', methods=['POST'])
+@requires_auth
 def create_focus_area():
     """创建关注领域"""
     data = request.get_json()
@@ -501,6 +594,7 @@ def create_focus_area():
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': area_id}})
 
 @app.route('/api/focus/areas/<int:area_id>', methods=['PUT'])
+@requires_auth
 def update_focus_area(area_id):
     """更新关注领域"""
     data = request.get_json()
@@ -515,6 +609,7 @@ def update_focus_area(area_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/focus/areas/<int:area_id>', methods=['DELETE'])
+@requires_auth
 def delete_focus_area(area_id):
     """删除关注领域及其事项"""
     conn = get_db_connection()
@@ -529,6 +624,7 @@ def delete_focus_area(area_id):
     return jsonify({'code': 0, 'message': '删除成功'})
 
 @app.route('/api/focus/items', methods=['GET'])
+@requires_auth
 def get_focus_items():
     """获取关注事项列表"""
     conn = get_db_connection()
@@ -573,6 +669,7 @@ def get_focus_items():
     return jsonify({'code': 0, 'data': items})
 
 @app.route('/api/focus/items', methods=['POST'])
+@requires_auth
 def create_focus_item():
     """创建关注事项"""
     data = request.get_json()
@@ -596,6 +693,7 @@ def create_focus_item():
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': item_id}})
 
 @app.route('/api/focus/items/<int:item_id>', methods=['PUT'])
+@requires_auth
 def update_focus_item(item_id):
     """更新关注事项"""
     data = request.get_json()
@@ -626,6 +724,7 @@ def update_focus_item(item_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/focus/items/<int:item_id>', methods=['DELETE'])
+@requires_auth
 def delete_focus_item(item_id):
     """删除关注事项"""
     conn = get_db_connection()
@@ -637,6 +736,7 @@ def delete_focus_item(item_id):
     return jsonify({'code': 0, 'message': '删除成功'})
 
 @app.route('/api/focus/kanban', methods=['GET'])
+@requires_auth
 def get_focus_kanban():
     """获取看板数据（按领域分组）"""
     conn = get_db_connection()
@@ -664,6 +764,7 @@ def get_focus_kanban():
 
 # ==================== 部门报告库API ====================
 @app.route('/api/reports', methods=['GET'])
+@requires_auth
 def get_reports():
     """获取报告列表"""
     conn = get_db_connection()
@@ -698,6 +799,7 @@ def get_reports():
     return jsonify({'code': 0, 'data': reports})
 
 @app.route('/api/reports', methods=['POST'])
+@requires_auth
 def create_report():
     """创建报告"""
     data = request.get_json()
@@ -715,6 +817,7 @@ def create_report():
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': report_id}})
 
 @app.route('/api/reports/<int:report_id>', methods=['PUT'])
+@requires_auth
 def update_report(report_id):
     """更新报告"""
     data = request.get_json()
@@ -741,6 +844,7 @@ def update_report(report_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/reports/<int:report_id>', methods=['DELETE'])
+@requires_auth
 def delete_report(report_id):
     """删除报告"""
     conn = get_db_connection()
@@ -753,6 +857,7 @@ def delete_report(report_id):
 
 # ==================== 系统配置API ====================
 @app.route('/api/config', methods=['GET'])
+@requires_auth
 def get_config():
     """获取系统配置"""
     config_type = request.args.get('type', '')
@@ -771,6 +876,7 @@ def get_config():
     return jsonify({'code': 0, 'data': configs})
 
 @app.route('/api/config', methods=['POST'])
+@requires_auth
 def add_config():
     """添加配置项"""
     data = request.get_json()
@@ -786,6 +892,7 @@ def add_config():
     return jsonify({'code': 0, 'message': '添加成功', 'data': {'id': config_id}})
 
 @app.route('/api/config/<int:config_id>', methods=['PUT'])
+@requires_auth
 def update_config(config_id):
     """更新配置项"""
     data = request.get_json()
@@ -800,6 +907,7 @@ def update_config(config_id):
     return jsonify({'code': 0, 'message': '更新成功'})
 
 @app.route('/api/config/<int:config_id>', methods=['DELETE'])
+@requires_auth
 def delete_config(config_id):
     """删除配置项"""
     conn = get_db_connection()
@@ -812,6 +920,7 @@ def delete_config(config_id):
 
 # ==================== 数据导入导出API ====================
 @app.route('/api/export/all', methods=['GET'])
+@requires_auth
 def export_all_data():
     """导出所有数据"""
     conn = get_db_connection()
@@ -897,6 +1006,7 @@ def export_all_data():
     return send_file(zip_path, as_attachment=True, download_name=f'office_export_{datetime.now().strftime("%Y%m%d%H%M%S")}.zip')
 
 @app.route('/api/import/all', methods=['POST'])
+@requires_auth
 def import_all_data():
     """导入所有数据"""
     if 'file' not in request.files:
@@ -1006,6 +1116,7 @@ def import_all_data():
         return jsonify({'code': 1, 'message': f'导入失败: {str(e)}'})
 
 @app.route('/api/export/attachments', methods=['GET'])
+@requires_auth
 def export_attachments():
     """批量导出附件"""
     temp_dir = tempfile.mkdtemp()
@@ -1052,6 +1163,134 @@ def export_attachments():
 def serve_static(filename):
     """提供静态文件"""
     return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), filename)
+
+# ==================== 报告附件API ====================
+@app.route('/api/reports/<int:report_id>/attachments', methods=['POST'])
+@requires_auth
+def upload_report_attachment(report_id):
+    """上传报告附件"""
+    if 'file' not in request.files:
+        return jsonify({'code': 1, 'message': '没有上传文件'})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'code': 1, 'message': '没有选择文件'})
+    
+    result = save_uploaded_file(file, 'report', report_id)
+    if result:
+        return jsonify({'code': 0, 'message': '上传成功', 'data': result})
+    return jsonify({'code': 1, 'message': '文件类型不支持'})
+
+@app.route('/api/reports/<int:report_id>/attachments', methods=['GET'])
+@requires_auth
+def get_report_attachments(report_id):
+    """获取报告附件列表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM attachments WHERE module_type = 'report' AND record_id = ?", (report_id,))
+    attachments = rows_to_list(cursor.fetchall())
+    conn.close()
+    return jsonify({'code': 0, 'data': attachments})
+
+# ==================== 文本汇总导出API ====================
+@app.route('/api/export/text_summary', methods=['GET'])
+@requires_auth
+def export_text_summary():
+    """导出文本汇总（待办任务+备忘录+重点关注+报告清单）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    lines = []
+    lines.append("=" * 60)
+    lines.append("本地办公工作台数据导出")
+    lines.append("导出时间: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    lines.append("=" * 60)
+    
+    # 待办任务
+    cursor.execute("SELECT * FROM todo_tasks ORDER BY created_at DESC")
+    tasks = rows_to_list(cursor.fetchall())
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append(f"待办任务 (共{len(tasks)}条)")
+    lines.append("=" * 60)
+    for task in tasks:
+        lines.append("")
+        lines.append(f"--- 任务ID: {task['id']} ---")
+        lines.append(f"摘要: {task['summary'] or ''}")
+        lines.append(f"详细内容: {task['detail_content'] or ''}")
+        lines.append(f"截止时间: {task['deadline'] or ''}")
+        lines.append(f"指派团队: {task['assigned_team'] or ''}")
+        lines.append(f"指派个人: {task['assigned_person'] or ''}")
+        lines.append(f"进度备注: {task['progress_note'] or ''}")
+        lines.append(f"标签: {task['tag'] or ''}")
+        lines.append(f"状态: {task['status'] or ''}")
+        lines.append(f"创建时间: {task['created_at'] or ''}")
+    
+    # 工作备忘录
+    cursor.execute("SELECT * FROM memos ORDER BY created_at DESC")
+    memos = rows_to_list(cursor.fetchall())
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append(f"工作备忘录 (共{len(memos)}条)")
+    lines.append("=" * 60)
+    for memo in memos:
+        lines.append("")
+        lines.append(f"--- 备忘录ID: {memo['id']} ---")
+        lines.append(f"标题: {memo['title'] or ''}")
+        lines.append(f"正文内容: {memo['content'] or ''}")
+        lines.append(f"标签: {memo['tags'] or ''}")
+        lines.append(f"创建时间: {memo['created_at'] or ''}")
+    
+    # 重点关注
+    cursor.execute('''
+        SELECT fi.*, fa.name as area_name 
+        FROM focus_items fi 
+        LEFT JOIN focus_areas fa ON fi.area_id = fa.id 
+        ORDER BY fi.created_at DESC
+    ''')
+    focus_items = rows_to_list(cursor.fetchall())
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append(f"重点关注 (共{len(focus_items)}条)")
+    lines.append("=" * 60)
+    for item in focus_items:
+        lines.append("")
+        lines.append(f"--- 关注ID: {item['id']} ---")
+        lines.append(f"标题: {item['title'] or ''}")
+        lines.append(f"备注: {item['note'] or ''}")
+        lines.append(f"计划完成时间: {item['planned_date'] or ''}")
+        lines.append(f"状态: {item['status'] or ''}")
+        lines.append(f"所属领域: {item['area_name'] or ''}")
+        lines.append(f"创建时间: {item['created_at'] or ''}")
+    
+    # 部门报告清单（不含正文）
+    cursor.execute("SELECT id, title, category, tags, created_at FROM reports ORDER BY created_at DESC")
+    reports = rows_to_list(cursor.fetchall())
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append(f"部门报告清单 (共{len(reports)}条)")
+    lines.append("=" * 60)
+    for report in reports:
+        lines.append("")
+        lines.append(f"--- 报告ID: {report['id']} ---")
+        lines.append(f"标题: {report['title'] or ''}")
+        lines.append(f"分类: {report['category'] or ''}")
+        lines.append(f"标签: {report['tags'] or ''}")
+        lines.append(f"创建时间: {report['created_at'] or ''}")
+    
+    lines.append("")
+    lines.append("=" * 60)
+    lines.append("导出结束")
+    lines.append("=" * 60)
+    
+    conn.close()
+    
+    content = '\n'.join(lines)
+    temp_file = os.path.join(tempfile.gettempdir(), f'text_summary_{datetime.now().strftime("%Y%m%d%H%M%S")}.txt')
+    with open(temp_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    return send_file(temp_file, as_attachment=True, download_name=f'text_summary_{datetime.now().strftime("%Y%m%d%H%M%S")}.txt')
 
 # ==================== 主程序入口 ====================
 if __name__ == '__main__':
