@@ -762,6 +762,154 @@ def get_focus_kanban():
     conn.close()
     return jsonify({'code': 0, 'data': areas})
 
+# ==================== 报告分类管理API ====================
+@app.route('/api/report_categories', methods=['GET'])
+@requires_auth
+def get_report_categories():
+    """获取报告分类列表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM report_categories ORDER BY sort_order ASC")
+    categories = rows_to_list(cursor.fetchall())
+    conn.close()
+    return jsonify({'code': 0, 'data': categories})
+
+@app.route('/api/report_categories', methods=['POST'])
+@requires_auth
+def add_report_category():
+    """新增报告分类"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    
+    if not name:
+        return jsonify({'code': 1, 'message': '分类名称不能为空'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM report_categories WHERE name = ?", (name,))
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return jsonify({'code': 1, 'message': '分类名称已存在'}), 400
+    
+    cursor.execute("SELECT MAX(sort_order) FROM report_categories")
+    max_sort = cursor.fetchone()[0] or 0
+    
+    cursor.execute('''
+        INSERT INTO report_categories (name, sort_order, is_system)
+        VALUES (?, ?, 0)
+    ''', (name, max_sort + 1))
+    
+    conn.commit()
+    category_id = cursor.lastrowid
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '分类添加成功', 'data': {'id': category_id, 'name': name}})
+
+@app.route('/api/report_categories/<int:category_id>', methods=['PUT'])
+@requires_auth
+def update_report_category(category_id):
+    """修改报告分类名称"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    
+    if not name:
+        return jsonify({'code': 1, 'message': '分类名称不能为空'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM report_categories WHERE id = ?", (category_id,))
+    category = cursor.fetchone()
+    
+    if not category:
+        conn.close()
+        return jsonify({'code': 1, 'message': '分类不存在'}), 400
+    
+    if category['is_system'] == 1 and name != '其他':
+        conn.close()
+        return jsonify({'code': 1, 'message': '系统默认分类名称不能修改'}), 400
+    
+    cursor.execute("SELECT COUNT(*) FROM report_categories WHERE name = ? AND id != ?", (name, category_id))
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return jsonify({'code': 1, 'message': '分类名称已存在'}), 400
+    
+    cursor.execute('''
+        UPDATE report_categories SET name = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (name, category_id))
+    
+    old_name = category['name']
+    if old_name != name:
+        cursor.execute('''
+            UPDATE reports SET category = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE category = ?
+        ''', (name, old_name))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '分类修改成功'})
+
+@app.route('/api/report_categories/<int:category_id>', methods=['DELETE'])
+@requires_auth
+def delete_report_category(category_id):
+    """删除报告分类（系统默认分类不可删除）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM report_categories WHERE id = ?", (category_id,))
+    category = cursor.fetchone()
+    
+    if not category:
+        conn.close()
+        return jsonify({'code': 1, 'message': '分类不存在'}), 400
+    
+    if category['is_system'] == 1:
+        conn.close()
+        return jsonify({'code': 1, 'message': '系统默认分类不可删除'}), 400
+    
+    category_name = category['name']
+    
+    cursor.execute("SELECT id FROM report_categories WHERE is_system = 1 LIMIT 1")
+    other_category = cursor.fetchone()
+    
+    if other_category:
+        other_name = other_category['name']
+        cursor.execute('''
+            UPDATE reports SET category = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE category = ?
+        ''', (other_name, category_name))
+    
+    cursor.execute("DELETE FROM report_categories WHERE id = ?", (category_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '分类删除成功，其下报告已转至"其他"分类'})
+
+@app.route('/api/report_categories/reorder', methods=['POST'])
+@requires_auth
+def reorder_report_categories():
+    """重新排序报告分类"""
+    data = request.get_json()
+    category_ids = data.get('category_ids', [])
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    for index, category_id in enumerate(category_ids):
+        cursor.execute('''
+            UPDATE report_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (index + 1, category_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '排序更新成功'})
+
 # ==================== 部门报告库API ====================
 @app.route('/api/reports', methods=['GET'])
 @requires_auth

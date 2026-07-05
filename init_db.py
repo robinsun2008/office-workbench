@@ -104,7 +104,19 @@ def init_database():
         )
     ''')
     
-    # ==================== 7. 系统配置表 ====================
+    # ==================== 7. 报告分类表 ====================
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS report_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,                -- 分类名称
+            sort_order INTEGER DEFAULT 0,       -- 排序顺序
+            is_system INTEGER DEFAULT 0,        -- 是否系统默认：0-用户自定义，1-系统默认（不可删除）
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # ==================== 8. 系统配置表 ====================
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS system_config (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +126,7 @@ def init_database():
         )
     ''')
     
-    # ==================== 8. 系统安全表（密码存储） ====================
+    # ==================== 9. 系统安全表（密码存储） ====================
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS system_security (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +155,20 @@ def init_database():
         # 默认关注领域
         default_areas = [('focus_area', '项目进度'), ('focus_area', '团队建设'), ('focus_area', '业务拓展')]
         cursor.executemany("INSERT INTO system_config (config_type, config_value) VALUES (?, ?)", default_areas)
+    
+    # ==================== 插入默认报告分类（首次初始化时） ====================
+    cursor.execute("SELECT COUNT(*) FROM report_categories")
+    if cursor.fetchone()[0] == 0:
+        # 默认报告分类，"其他"标记为系统默认不可删除
+        default_categories = [
+            ('自查报告', 1, 0),
+            ('审计报告', 2, 0),
+            ('工作周报', 3, 0),
+            ('工作月报', 4, 0),
+            ('其他', 999, 1)
+        ]
+        cursor.executemany("INSERT INTO report_categories (name, sort_order, is_system) VALUES (?, ?, ?)", default_categories)
+        print("默认报告分类已初始化")
     
     # ==================== 设置默认密码（首次初始化时） ====================
     cursor.execute("SELECT COUNT(*) FROM system_security")

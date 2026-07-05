@@ -1035,6 +1035,7 @@ const ReportModule = {
     
     init() {
         this.loadReports();
+        this.loadReportCategories();
         this.bindEvents();
     },
     
@@ -1046,6 +1047,25 @@ const ReportModule = {
             e.preventDefault();
             this.saveReport();
         });
+    },
+    
+    async loadReportCategories() {
+        const result = await apiRequest('/report_categories');
+        if (result.code === 0) {
+            const categories = result.data;
+            const filterSelect = document.getElementById('reportCategoryFilter');
+            const formSelect = document.getElementById('reportCategory');
+            
+            if (filterSelect) {
+                filterSelect.innerHTML = '<option value="">全部分类</option>' +
+                    categories.map(cat => `<option value="${cat.name}">${cat.name}</option>`).join('');
+            }
+            
+            if (formSelect) {
+                formSelect.innerHTML = '<option value="">请选择分类</option>' +
+                    categories.map(cat => `<option value="${cat.name}">${cat.name}</option>`).join('');
+            }
+        }
     },
     
     async loadReports() {
@@ -1248,9 +1268,11 @@ const ReportModule = {
 // ==================== 系统配置模块 ====================
 const ConfigModule = {
     configs: [],
+    reportCategories: [],
     
     init() {
         this.loadConfigs();
+        this.loadReportCategories();
         this.bindEvents();
     },
     
@@ -1266,6 +1288,14 @@ const ConfigModule = {
         if (result.code === 0) {
             this.configs = result.data;
             this.renderConfigs();
+        }
+    },
+    
+    async loadReportCategories() {
+        const result = await apiRequest('/report_categories');
+        if (result.code === 0) {
+            this.reportCategories = result.data;
+            this.renderReportCategories();
         }
     },
     
@@ -1289,6 +1319,26 @@ const ConfigModule = {
                 `).join('') || '<div class="text-muted">暂无配置项</div>';
             }
         });
+    },
+    
+    renderReportCategories() {
+        const container = document.getElementById('config-report_category');
+        if (!container) return;
+        
+        if (this.reportCategories.length === 0) {
+            container.innerHTML = '<div class="text-muted">暂无分类</div>';
+            return;
+        }
+        
+        container.innerHTML = this.reportCategories.map(cat => `
+            <div class="config-item" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: #f7fafc; border-radius: 4px; margin-bottom: 8px;">
+                <span style="flex: 1;">${cat.name} ${cat.is_system ? '<span style="font-size:12px;color:#999">(系统默认)</span>' : ''}</span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-secondary btn-sm" onclick="ConfigModule.editReportCategory(${cat.id}, '${cat.name}', ${cat.is_system})">编辑</button>
+                    <button class="btn btn-danger btn-sm" ${cat.is_system ? 'disabled' : ''} onclick="ConfigModule.deleteReportCategory(${cat.id}, '${cat.name}')">删除</button>
+                </div>
+            </div>
+        `).join('');
     },
     
     async addConfig() {
@@ -1315,6 +1365,49 @@ const ConfigModule = {
         if (result.code === 0) {
             showMessage('删除成功', 'success');
             this.loadConfigs();
+        }
+    },
+    
+    async addReportCategory() {
+        const name = prompt('请输入新分类名称：');
+        if (!name) return;
+        
+        const result = await apiRequest('/report_categories', 'POST', { name });
+        if (result.code === 0) {
+            showMessage('分类添加成功', 'success');
+            this.loadReportCategories();
+        } else {
+            showMessage(result.message || '添加失败', 'error');
+        }
+    },
+    
+    async editReportCategory(categoryId, currentName, isSystem) {
+        if (isSystem) {
+            showMessage('系统默认分类不可修改', 'warning');
+            return;
+        }
+        
+        const newName = prompt('请输入新分类名称：', currentName);
+        if (!newName || newName === currentName) return;
+        
+        const result = await apiRequest(`/report_categories/${categoryId}`, 'PUT', { name: newName });
+        if (result.code === 0) {
+            showMessage('分类修改成功', 'success');
+            this.loadReportCategories();
+        } else {
+            showMessage(result.message || '修改失败', 'error');
+        }
+    },
+    
+    async deleteReportCategory(categoryId, categoryName) {
+        if (!confirm(`确定要删除分类"${categoryName}"吗？删除后其下报告将转至"其他"分类。`)) return;
+        
+        const result = await apiRequest(`/report_categories/${categoryId}`, 'DELETE');
+        if (result.code === 0) {
+            showMessage(result.message || '删除成功', 'success');
+            this.loadReportCategories();
+        } else {
+            showMessage(result.message || '删除失败', 'error');
         }
     }
 };
