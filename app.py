@@ -317,6 +317,20 @@ def create_task():
     
     return jsonify({'code': 0, 'message': '创建成功', 'data': {'id': task_id}})
 
+@app.route('/api/tasks/<int:task_id>', methods=['GET'])
+@requires_auth
+def get_task(task_id):
+    """获取单个任务详情"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM todo_tasks WHERE id = ?", (task_id,))
+    task = row_to_dict(cursor.fetchone())
+    conn.close()
+    
+    if task:
+        return jsonify({'code': 0, 'data': task})
+    return jsonify({'code': 1, 'message': '任务不存在'}), 404
+
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 @requires_auth
 def update_task(task_id):
@@ -435,6 +449,41 @@ def delete_attachment(attachment_id):
     
     conn.close()
     return jsonify({'code': 0, 'message': '删除成功'})
+
+@app.route('/api/attachments/<int:attachment_id>/rename', methods=['PUT'])
+@requires_auth
+def rename_attachment(attachment_id):
+    """修改附件文件名"""
+    data = request.get_json()
+    new_name = data.get('file_name', '').strip()
+    
+    if not new_name:
+        return jsonify({'code': 1, 'message': '文件名不能为空'}), 400
+    
+    if len(new_name) > 200:
+        return jsonify({'code': 1, 'message': '文件名长度不能超过200个字符'}), 400
+    
+    forbidden_chars = '/\\:*?"<>|'
+    for char in forbidden_chars:
+        if char in new_name:
+            return jsonify({'code': 1, 'message': f'文件名不能包含特殊字符: {forbidden_chars}'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,))
+    attachment = cursor.fetchone()
+    
+    if not attachment:
+        conn.close()
+        return jsonify({'code': 1, 'message': '附件不存在'}), 404
+    
+    cursor.execute('''
+        UPDATE attachments SET file_name = ? WHERE id = ?
+    ''', (new_name, attachment_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '文件名修改成功'})
 
 # ==================== 工作备忘录API ====================
 @app.route('/api/memos', methods=['GET'])

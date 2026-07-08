@@ -15,7 +15,14 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
 # 允许的文件扩展名
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar'}
+ALLOWED_EXTENSIONS = {
+    'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif',
+    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    'zip', 'rar', '7z', 'tar', 'gz',
+    'md', 'markdown',
+    'csv', 'json', 'xml',
+    'msg', 'eml'
+}
 
 # 最大文件大小 (50MB)
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024

@@ -342,11 +342,12 @@ const TodoModule = {
             container.innerHTML = result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
                         <button class="btn btn-secondary btn-sm" onclick="downloadFile(${att.id})">下载</button>
+                        <button class="btn btn-secondary btn-sm" onclick="startRenameAttachment(${att.id}, document.querySelector('[data-att-id="${att.id}"]'))">重命名</button>
                         <button class="btn btn-danger btn-sm" onclick="TodoModule.deleteAttachment(${att.id}, ${taskId})">删除</button>
                     </span>
                 </div>
@@ -664,11 +665,12 @@ const MemoModule = {
             container.innerHTML = result.data.length > 0 ? result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
                         <button class="btn btn-secondary btn-sm" onclick="downloadFile(${att.id})">下载</button>
+                        <button class="btn btn-secondary btn-sm" onclick="startRenameAttachment(${att.id})">重命名</button>
                         <button class="btn btn-danger btn-sm" onclick="MemoModule.deleteAttachment(${att.id}, ${memoId})">删除</button>
                     </span>
                 </div>
@@ -1126,11 +1128,12 @@ const ReportModule = {
             container.innerHTML = result.data.length > 0 ? result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
                         <button class="btn btn-secondary btn-sm" onclick="downloadFile(${att.id})">下载</button>
+                        <button class="btn btn-secondary btn-sm" onclick="startRenameAttachment(${att.id})">重命名</button>
                         <button class="btn btn-danger btn-sm" onclick="ReportModule.deleteAttachment(${att.id}, ${reportId})">删除</button>
                     </span>
                 </div>
@@ -1445,7 +1448,7 @@ const HomeModule = {
                 <div class="alert-content">以下任务将在未来5天内到期，请及时处理</div>
             </div>
             ${tasks.map(task => `
-                <div class="card" style="margin-bottom: 12px;">
+                <div class="card" style="margin-bottom: 12px; cursor: pointer;" onclick="HomeModule.viewTaskDetail(${task.id})">
                     <div class="card-body">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
@@ -1459,6 +1462,70 @@ const HomeModule = {
                 </div>
             `).join('')}
         `;
+    },
+    
+    currentTaskId: null,
+    
+    async viewTaskDetail(taskId) {
+        this.currentTaskId = taskId;
+        const result = await apiRequest(`/tasks/${taskId}`);
+        if (result.code === 0) {
+            const task = result.data;
+            document.getElementById('taskDetailBody').innerHTML = `
+                <div class="form-group">
+                    <label>任务摘要</label>
+                    <input type="text" id="viewTaskSummary" class="form-control" value="${task.summary || ''}" disabled>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>标签</label>
+                        <input type="text" id="viewTaskTag" class="form-control" value="${task.tag || ''}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>状态</label>
+                        <input type="text" id="viewTaskStatus" class="form-control" value="${task.status || ''}" disabled>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>截止时间</label>
+                        <input type="text" id="viewTaskDeadline" class="form-control" value="${task.deadline || ''}" disabled>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>指派团队</label>
+                        <input type="text" id="viewTaskTeam" class="form-control" value="${task.assigned_team || ''}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>指派个人</label>
+                        <input type="text" id="viewTaskPerson" class="form-control" value="${task.assigned_person || ''}" disabled>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>详细内容</label>
+                    <textarea id="viewTaskDetail" class="form-control" rows="4" disabled>${task.detail_content || ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>进度备注</label>
+                    <textarea id="viewTaskProgress" class="form-control" rows="2" disabled>${task.progress_note || ''}</textarea>
+                </div>
+            `;
+            
+            document.getElementById('editTaskBtn').onclick = () => {
+                this.editTask(taskId);
+            };
+            
+            openModal('taskDetailModal');
+        }
+    },
+    
+    async editTask(taskId) {
+        closeModal('taskDetailModal');
+        window.location.href = `/todo`;
+        setTimeout(() => {
+            TodoModule.editTask(taskId);
+        }, 500);
     }
 };
 
@@ -1512,6 +1579,53 @@ async function exportTextSummary() {
 // ==================== 下载文件 ====================
 function downloadFile(attachmentId) {
     window.location.href = `/api/attachments/${attachmentId}/download`;
+}
+
+// ==================== 重命名附件 ====================
+function startRenameAttachment(attachmentId, element) {
+    const nameElement = element || document.querySelector(`.attachment-item[data-att-id="${attachmentId}"] .attachment-name`);
+    if (!nameElement) return;
+    
+    const currentName = nameElement.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'form-control';
+    input.style.width = 'auto';
+    input.style.display = 'inline-block';
+    input.style.maxWidth = '200px';
+    
+    input.onkeydown = async (e) => {
+        if (e.key === 'Enter') {
+            await saveRename(attachmentId, input.value, nameElement);
+        } else if (e.key === 'Escape') {
+            nameElement.textContent = currentName;
+        }
+    };
+    
+    input.onblur = async () => {
+        await saveRename(attachmentId, input.value, nameElement);
+    };
+    
+    nameElement.innerHTML = '';
+    nameElement.appendChild(input);
+    input.focus();
+    input.select();
+}
+
+async function saveRename(attachmentId, newName, nameElement) {
+    newName = newName.trim();
+    if (!newName) {
+        showMessage('文件名不能为空', 'warning');
+        return;
+    }
+    
+    const result = await apiRequest(`/attachments/${attachmentId}/rename`, 'PUT', { file_name: newName });
+    if (result.code === 0) {
+        nameElement.textContent = newName;
+    } else {
+        showMessage(result.message || '重命名失败', 'error');
+    }
 }
 
 // ==================== 折叠面板切换 ====================
