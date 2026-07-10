@@ -866,6 +866,9 @@ const FocusModule = {
                                 <span class="tag ${getStatusClass(item.status)}">${item.status}</span>
                                 <span>${item.planned_date ? '计划: ' + formatDate(item.planned_date) : ''}</span>
                             </div>
+                            <div class="kanban-item-actions">
+                                <button class="btn btn-danger btn-xs" onclick="event.stopPropagation(); FocusModule.deleteItem(${item.id})">删除</button>
+                            </div>
                         </div>
                     `).join('')}
                     <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 10px;" onclick="FocusModule.openCreateItemModal(${area.id})">+ 添加事项</button>

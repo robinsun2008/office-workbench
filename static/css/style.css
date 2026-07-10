@@ -234,6 +234,11 @@ textarea.form-control {
     font-size: 13px;
 }
 
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
 .btn-info {
     background: #319795;
     color: #fff;
@@ -489,6 +494,7 @@ textarea.form-control {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     transition: box-shadow 0.2s;
+    position: relative;
 }
 
 .kanban-item:hover {
@@ -504,6 +510,17 @@ textarea.form-control {
 .kanban-item-meta {
     font-size: 12px;
     color: #718096;
+}
+
+.kanban-item-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: none;
+}
+
+.kanban-item:hover .kanban-item-actions {
+    display: block;
 }
 
 /* ==================== 折叠面板 ==================== */
