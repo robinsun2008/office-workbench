@@ -134,6 +134,12 @@
                         <label class="form-label">长文本备注</label>
                         <textarea id="itemNote" class="form-control" rows="6" placeholder="请输入备注内容，支持数千字"></textarea>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">附件</label>
+                        <input type="file" id="itemFile" class="form-control" multiple>
+                        <button class="btn btn-secondary btn-sm mt-2" onclick="FocusModule.uploadAttachment()">上传附件</button>
+                        <div id="focus-item-attachments" class="attachment-list mt-2"></div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -141,6 +147,11 @@
                 <button class="btn btn-primary" onclick="FocusModule.saveItem()">保存</button>
             </div>
         </div>
+    </div>
+    
+    <!-- 版本号 -->
+    <div class="version-footer">
+        <span>版本: {{ version }}</span>
     </div>
     
     <script src="/static/js/app.js"></script>

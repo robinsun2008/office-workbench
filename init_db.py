@@ -23,6 +23,31 @@ def init_database():
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # ==================== 数据库迁移：添加软删除字段 ====================
+    try:
+        cursor.execute("ALTER TABLE todo_tasks ADD COLUMN is_deleted INTEGER DEFAULT 0")
+        print("已为 todo_tasks 添加 is_deleted 字段")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE todo_tasks ADD COLUMN deleted_at DATETIME")
+        print("已为 todo_tasks 添加 deleted_at 字段")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE focus_items ADD COLUMN is_deleted INTEGER DEFAULT 0")
+        print("已为 focus_items 添加 is_deleted 字段")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE focus_items ADD COLUMN deleted_at DATETIME")
+        print("已为 focus_items 添加 deleted_at 字段")
+    except sqlite3.OperationalError:
+        pass
+    
     # ==================== 1. 待办任务表 ====================
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todo_tasks (

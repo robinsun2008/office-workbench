@@ -30,6 +30,9 @@ MAX_CONTENT_LENGTH = 50 * 1024 * 1024
 # 密钥
 SECRET_KEY = 'office-workbench-secret-key-2024'
 
+# 版本号
+VERSION = 'v1.4'
+
 # SSL证书配置
 # 方式1: 自签名证书（仅限本地测试）
 SSL_CERT = os.path.join(BASE_DIR, 'ssl', 'server.crt')

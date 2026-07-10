@@ -24,6 +24,7 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 app.config['SECRET_KEY'] = SECRET_KEY
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
 CORS(app)
 
 # 确保上传目录存在
@@ -117,37 +118,37 @@ def update_password(new_password):
 @app.route('/')
 def index():
     """首页 - 展示近3天到期任务"""
-    return render_template('index.html')
+    return render_template('index.html', version=VERSION)
 
 @app.route('/login')
 def login_page():
     """登录页面"""
-    return render_template('login.html')
+    return render_template('login.html', version=VERSION)
 
 @app.route('/todo')
 def todo_page():
     """待办任务页面"""
-    return render_template('todo.html')
+    return render_template('todo.html', version=VERSION)
 
 @app.route('/memo')
 def memo_page():
     """工作备忘录页面"""
-    return render_template('memo.html')
+    return render_template('memo.html', version=VERSION)
 
 @app.route('/focus')
 def focus_page():
     """重点关注看板页面"""
-    return render_template('focus.html')
+    return render_template('focus.html', version=VERSION)
 
 @app.route('/report')
 def report_page():
     """部门报告库页面"""
-    return render_template('report.html')
+    return render_template('report.html', version=VERSION)
 
 @app.route('/config')
 def config_page():
     """系统配置页面"""
-    return render_template('config.html')
+    return render_template('config.html', version=VERSION)
 
 # ==================== 登录认证API ====================
 @app.route('/api/login', methods=['POST'])
@@ -211,7 +212,7 @@ def get_tasks():
     sort = request.args.get('sort', 'created_desc')  # 默认创建时间倒序
     
     # 构建SQL查询
-    sql = "SELECT * FROM todo_tasks WHERE 1=1"
+    sql = "SELECT * FROM todo_tasks WHERE (is_deleted = 0 OR is_deleted IS NULL)"
     params = []
     
     if keyword:
@@ -277,7 +278,8 @@ def get_upcoming_tasks():
     
     cursor.execute('''
         SELECT * FROM todo_tasks 
-        WHERE status = '未完成' 
+        WHERE (is_deleted = 0 OR is_deleted IS NULL)
+        AND status = '未完成' 
         AND deadline IS NOT NULL 
         AND deadline >= ? 
         AND deadline <= ?
@@ -362,11 +364,25 @@ def update_task(task_id):
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
 @requires_auth
 def delete_task(task_id):
-    """删除待办任务"""
+    """软删除待办任务"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 删除关联附件
+    cursor.execute('''
+        UPDATE todo_tasks SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?
+    ''', (task_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '删除成功（已标记为删除）'})
+
+@app.route('/api/tasks/<int:task_id>/force', methods=['DELETE'])
+@requires_auth
+def force_delete_task(task_id):
+    """强制删除待办任务（用于清理）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
     cursor.execute("SELECT file_path FROM attachments WHERE module_type = 'todo' AND record_id = ?", (task_id,))
     attachments = cursor.fetchall()
     for att in attachments:
@@ -378,7 +394,7 @@ def delete_task(task_id):
     conn.commit()
     conn.close()
     
-    return jsonify({'code': 0, 'message': '删除成功'})
+    return jsonify({'code': 0, 'message': '强制删除成功'})
 
 @app.route('/api/tasks/<int:task_id>/complete', methods=['POST'])
 @requires_auth
@@ -687,7 +703,7 @@ def get_focus_items():
         SELECT fi.*, fa.name as area_name 
         FROM focus_items fi 
         LEFT JOIN focus_areas fa ON fi.area_id = fa.id 
-        WHERE 1=1
+        WHERE (fi.is_deleted = 0 OR fi.is_deleted IS NULL)
     '''
     params = []
     
@@ -775,14 +791,37 @@ def update_focus_item(item_id):
 @app.route('/api/focus/items/<int:item_id>', methods=['DELETE'])
 @requires_auth
 def delete_focus_item(item_id):
-    """删除关注事项"""
+    """软删除关注事项"""
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE focus_items SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?
+    ''', (item_id,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': '删除成功（已标记为删除）'})
+
+@app.route('/api/focus/items/<int:item_id>/force', methods=['DELETE'])
+@requires_auth
+def force_delete_focus_item(item_id):
+    """强制删除关注事项（用于清理）"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT file_path FROM attachments WHERE module_type = 'focus' AND record_id = ?", (item_id,))
+    attachments = cursor.fetchall()
+    for att in attachments:
+        if os.path.exists(att['file_path']):
+            os.remove(att['file_path'])
+    
+    cursor.execute("DELETE FROM attachments WHERE module_type = 'focus' AND record_id = ?", (item_id,))
     cursor.execute("DELETE FROM focus_items WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
     
-    return jsonify({'code': 0, 'message': '删除成功'})
+    return jsonify({'code': 0, 'message': '强制删除成功'})
 
 @app.route('/api/focus/kanban', methods=['GET'])
 @requires_auth
@@ -803,6 +842,7 @@ def get_focus_kanban():
         cursor.execute('''
             SELECT * FROM focus_items 
             WHERE area_id = ? 
+            AND (is_deleted = 0 OR is_deleted IS NULL)
             AND (status != '完成' OR completed_at IS NULL OR completed_at >= ?)
             ORDER BY created_at DESC
         ''', (area['id'], one_month_ago.strftime('%Y-%m-%d %H:%M:%S')))
@@ -810,6 +850,33 @@ def get_focus_kanban():
     
     conn.close()
     return jsonify({'code': 0, 'data': areas})
+
+@app.route('/api/focus/items/<int:item_id>/attachments', methods=['POST'])
+@requires_auth
+def upload_focus_attachment(item_id):
+    """上传重点关注事项附件"""
+    if 'file' not in request.files:
+        return jsonify({'code': 1, 'message': '请选择文件'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'code': 1, 'message': '请选择文件'}), 400
+    
+    result = save_uploaded_file(file, 'focus', item_id)
+    if result:
+        return jsonify({'code': 0, 'message': '上传成功', 'data': result})
+    return jsonify({'code': 1, 'message': '文件类型不允许'}), 400
+
+@app.route('/api/focus/items/<int:item_id>/attachments', methods=['GET'])
+@requires_auth
+def get_focus_attachments(item_id):
+    """获取重点关注事项附件列表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM attachments WHERE module_type = 'focus' AND record_id = ?", (item_id,))
+    attachments = rows_to_list(cursor.fetchall())
+    conn.close()
+    return jsonify({'code': 0, 'data': attachments})
 
 # ==================== 报告分类管理API ====================
 @app.route('/api/report_categories', methods=['GET'])
@@ -1389,11 +1456,48 @@ def get_report_attachments(report_id):
     conn.close()
     return jsonify({'code': 0, 'data': attachments})
 
+# ==================== 删除清理API ====================
+@app.route('/api/cleanup/deleted', methods=['DELETE'])
+@requires_auth
+def cleanup_deleted():
+    """清理所有标记为删除的待办任务和重点关注事项"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT id FROM todo_tasks WHERE is_deleted = 1")
+    task_ids = [row['id'] for row in cursor.fetchall()]
+    for task_id in task_ids:
+        cursor.execute("SELECT file_path FROM attachments WHERE module_type = 'todo' AND record_id = ?", (task_id,))
+        attachments = cursor.fetchall()
+        for att in attachments:
+            if os.path.exists(att['file_path']):
+                os.remove(att['file_path'])
+        cursor.execute("DELETE FROM attachments WHERE module_type = 'todo' AND record_id = ?", (task_id,))
+    
+    cursor.execute("DELETE FROM todo_tasks WHERE is_deleted = 1")
+    
+    cursor.execute("SELECT id FROM focus_items WHERE is_deleted = 1")
+    item_ids = [row['id'] for row in cursor.fetchall()]
+    for item_id in item_ids:
+        cursor.execute("SELECT file_path FROM attachments WHERE module_type = 'focus' AND record_id = ?", (item_id,))
+        attachments = cursor.fetchall()
+        for att in attachments:
+            if os.path.exists(att['file_path']):
+                os.remove(att['file_path'])
+        cursor.execute("DELETE FROM attachments WHERE module_type = 'focus' AND record_id = ?", (item_id,))
+    
+    cursor.execute("DELETE FROM focus_items WHERE is_deleted = 1")
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'code': 0, 'message': f'清理完成：{len(task_ids)}条待办任务，{len(item_ids)}条重点关注事项'})
+
 # ==================== 文本汇总导出API ====================
 @app.route('/api/export/text_summary', methods=['GET'])
 @requires_auth
 def export_text_summary():
-    """导出文本汇总（待办任务+备忘录+重点关注+报告清单）"""
+    """导出文本汇总（待办任务+备忘录+重点关注+报告清单，包含已删除内容）"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -1403,8 +1507,8 @@ def export_text_summary():
     lines.append("导出时间: " + datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     lines.append("=" * 60)
     
-    # 待办任务
-    cursor.execute("SELECT * FROM todo_tasks ORDER BY created_at DESC")
+    # 待办任务（未删除）
+    cursor.execute("SELECT * FROM todo_tasks WHERE (is_deleted = 0 OR is_deleted IS NULL) ORDER BY created_at DESC")
     tasks = rows_to_list(cursor.fetchall())
     lines.append("")
     lines.append("=" * 60)
@@ -1438,11 +1542,12 @@ def export_text_summary():
         lines.append(f"标签: {memo['tags'] or ''}")
         lines.append(f"创建时间: {memo['created_at'] or ''}")
     
-    # 重点关注
+    # 重点关注（未删除）
     cursor.execute('''
         SELECT fi.*, fa.name as area_name 
         FROM focus_items fi 
         LEFT JOIN focus_areas fa ON fi.area_id = fa.id 
+        WHERE (fi.is_deleted = 0 OR fi.is_deleted IS NULL)
         ORDER BY fi.created_at DESC
     ''')
     focus_items = rows_to_list(cursor.fetchall())
@@ -1474,6 +1579,47 @@ def export_text_summary():
         lines.append(f"分类: {report['category'] or ''}")
         lines.append(f"标签: {report['tags'] or ''}")
         lines.append(f"创建时间: {report['created_at'] or ''}")
+    
+    # 已删除的待办任务
+    cursor.execute("SELECT * FROM todo_tasks WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    deleted_tasks = rows_to_list(cursor.fetchall())
+    if deleted_tasks:
+        lines.append("")
+        lines.append("=" * 60)
+        lines.append(f"【已删除】待办任务 (共{len(deleted_tasks)}条)")
+        lines.append("=" * 60)
+        for task in deleted_tasks:
+            lines.append("")
+            lines.append(f"--- 任务ID: {task['id']} [已删除] ---")
+            lines.append(f"摘要: {task['summary'] or ''}")
+            lines.append(f"详细内容: {task['detail_content'] or ''}")
+            lines.append(f"截止时间: {task['deadline'] or ''}")
+            lines.append(f"标签: {task['tag'] or ''}")
+            lines.append(f"状态: {task['status'] or ''}")
+            lines.append(f"删除时间: {task['deleted_at'] or ''}")
+    
+    # 已删除的重点关注
+    cursor.execute('''
+        SELECT fi.*, fa.name as area_name 
+        FROM focus_items fi 
+        LEFT JOIN focus_areas fa ON fi.area_id = fa.id 
+        WHERE fi.is_deleted = 1
+        ORDER BY fi.deleted_at DESC
+    ''')
+    deleted_focus = rows_to_list(cursor.fetchall())
+    if deleted_focus:
+        lines.append("")
+        lines.append("=" * 60)
+        lines.append(f"【已删除】重点关注 (共{len(deleted_focus)}条)")
+        lines.append("=" * 60)
+        for item in deleted_focus:
+            lines.append("")
+            lines.append(f"--- 关注ID: {item['id']} [已删除] ---")
+            lines.append(f"标题: {item['title'] or ''}")
+            lines.append(f"备注: {item['note'] or ''}")
+            lines.append(f"状态: {item['status'] or ''}")
+            lines.append(f"所属领域: {item['area_name'] or ''}")
+            lines.append(f"删除时间: {item['deleted_at'] or ''}")
     
     lines.append("")
     lines.append("=" * 60)

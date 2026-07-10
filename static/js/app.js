@@ -980,6 +980,8 @@ const FocusModule = {
                 document.getElementById('itemPlannedDate').value = item.planned_date || '';
                 document.getElementById('itemStatus').value = item.status || '未开始';
                 
+                await this.loadAttachments(itemId);
+                
                 document.getElementById('itemModalTitle').textContent = '编辑关注事项';
                 openModal('itemModal');
             }
@@ -1026,6 +1028,60 @@ const FocusModule = {
         if (result.code === 0) {
             showMessage('删除成功', 'success');
             this.loadData();
+        }
+    },
+    
+    async loadAttachments(itemId) {
+        const result = await apiRequest(`/focus/items/${itemId}/attachments`);
+        const container = document.getElementById('focus-item-attachments');
+        if (container && result.code === 0) {
+            container.innerHTML = result.data.length > 0 ? result.data.map(att => `
+                <div class="attachment-item">
+                    <span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
+                        <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
+                    </span>
+                    <span>
+                        <button class="btn btn-secondary btn-sm" onclick="downloadFile(${att.id})">下载</button>
+                        <button class="btn btn-secondary btn-sm" onclick="startRenameAttachment(${att.id})">重命名</button>
+                        <button class="btn btn-danger btn-sm" onclick="FocusModule.deleteAttachment(${att.id}, ${itemId})">删除</button>
+                    </span>
+                </div>
+            `).join('') : '<span class="text-muted">无附件</span>';
+        }
+    },
+    
+    async uploadAttachment() {
+        const input = document.getElementById('itemFile');
+        const file = input.files[0];
+        if (!file) {
+            showMessage('请选择文件', 'warning');
+            return;
+        }
+        
+        if (!this.currentItemId) {
+            showMessage('请先保存事项', 'warning');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const result = await apiRequest(`/focus/items/${this.currentItemId}/attachments`, 'POST', formData);
+        if (result.code === 0) {
+            showMessage('上传成功', 'success');
+            input.value = '';
+            this.loadAttachments(this.currentItemId);
+        } else {
+            showMessage(result.message || '上传失败', 'error');
+        }
+    },
+    
+    async deleteAttachment(attachmentId, itemId) {
+        const result = await apiRequest(`/attachments/${attachmentId}`, 'DELETE');
+        if (result.code === 0) {
+            showMessage('删除成功', 'success');
+            this.loadAttachments(itemId);
         }
     }
 };
@@ -1411,6 +1467,17 @@ const ConfigModule = {
             this.loadReportCategories();
         } else {
             showMessage(result.message || '删除失败', 'error');
+        }
+    },
+    
+    async cleanupDeleted() {
+        if (!confirm('确定要清理所有已删除的记录吗？此操作不可恢复！')) return;
+        
+        const result = await apiRequest('/cleanup/deleted', 'DELETE');
+        if (result.code === 0) {
+            showMessage(result.message || '清理完成', 'success');
+        } else {
+            showMessage(result.message || '清理失败', 'error');
         }
     }
 };

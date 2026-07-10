@@ -148,7 +148,25 @@
                     </p>
                 </div>
             </div>
+            
+            <!-- 删除清理 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">删除清理</h2>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-danger" onclick="ConfigModule.cleanupDeleted()">清理已删除记录</button>
+                    <p class="text-muted mt-2" style="font-size: 12px;">
+                        此操作将永久删除所有标记为"已删除"的待办任务和重点关注事项及其关联附件，操作不可恢复。
+                    </p>
+                </div>
+            </div>
         </main>
+    </div>
+    
+    <!-- 版本号 -->
+    <div class="version-footer">
+        <span>版本: {{ version }}</span>
     </div>
     
     <script src="/static/js/app.js"></script>
