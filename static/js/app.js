@@ -77,14 +77,18 @@ function handleChangePassword(e) {
  */
 async function apiRequest(url, method = 'GET', data = null) {
     const options = {
-        method: method,
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        method: method
     };
     
     if (data && method !== 'GET') {
-        options.body = JSON.stringify(data);
+        if (data instanceof FormData) {
+            options.body = data;
+        } else {
+            options.headers = {
+                'Content-Type': 'application/json'
+            };
+            options.body = JSON.stringify(data);
+        }
     }
     
     try {
