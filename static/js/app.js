@@ -155,6 +155,15 @@ function getTagClass(tag) {
     return tagMap[tag] || 'tag-normal';
 }
 
+function getTagColor(tag) {
+    const colorMap = {
+        '紧急': '#e53e3e',
+        '重要': '#dd6b20',
+        '一般': '#48bb78'
+    };
+    return colorMap[tag] || '#4a5568';
+}
+
 /**
  * 获取状态样式类
  */
@@ -1516,26 +1525,62 @@ const HomeModule = {
             return;
         }
         
-        container.innerHTML = `
+        const now = new Date();
+        
+        const tagGroups = {
+            '紧急': [],
+            '重要': [],
+            '一般': []
+        };
+        
+        tasks.forEach(task => {
+            const tag = task.tag || '一般';
+            if (!tagGroups[tag]) tagGroups['一般'].push(task);
+            else tagGroups[tag].push(task);
+        });
+        
+        const tagOrder = ['紧急', '重要', '一般'];
+        let html = `
             <div class="alert-card warning">
                 <div class="alert-title">即将到期任务提醒</div>
-                <div class="alert-content">以下任务将在未来5天内到期，请及时处理</div>
+                <div class="alert-content">以下任务将在未来5天内到期或已逾期，请及时处理</div>
             </div>
-            ${tasks.map(task => `
-                <div class="card" style="margin-bottom: 12px; cursor: pointer;" onclick="HomeModule.viewTaskDetail(${task.id})">
-                    <div class="card-body">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span class="tag ${getTagClass(task.tag)}">${task.tag || '一般'}</span>
-                                <strong style="margin-left: 8px;">${task.summary}</strong>
-                            </div>
-                            <span class="text-danger">截止: ${formatDateTime(task.deadline)}</span>
-                        </div>
-                        ${task.assigned_person ? `<div class="text-muted mt-1">负责人: ${task.assigned_person}</div>` : ''}
-                    </div>
-                </div>
-            `).join('')}
         `;
+        
+        tagOrder.forEach(tag => {
+            const groupTasks = tagGroups[tag] || [];
+            if (groupTasks.length === 0) return;
+            
+            const notOverdue = groupTasks.filter(t => new Date(t.deadline) >= now).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+            const overdue = groupTasks.filter(t => new Date(t.deadline) < now).sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
+            
+            html += `
+                <div class="mt-4">
+                    <h4 style="color: #2d3748; margin-bottom: 12px; border-left: 4px solid ${getTagColor(tag)}; padding-left: 8px;">${tag}</h4>
+                    ${[...notOverdue, ...overdue].map(task => {
+                        const isOverdue = new Date(task.deadline) < now;
+                        return `
+                            <div class="card" style="margin-bottom: 12px; cursor: pointer;" onclick="HomeModule.viewTaskDetail(${task.id})">
+                                <div class="card-body">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <span class="tag ${getTagClass(task.tag)}">${task.tag || '一般'}</span>
+                                            <strong style="margin-left: 8px;">${task.summary}</strong>
+                                        </div>
+                                        <span class="${isOverdue ? 'text-danger font-bold' : 'text-warning'}">
+                                            ${isOverdue ? '已逾期: ' : '截止: '}${formatDateTime(task.deadline)}
+                                        </span>
+                                    </div>
+                                    ${task.assigned_person ? `<div class="text-muted mt-1">负责人: ${task.assigned_person}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
     },
     
     currentTaskId: null,

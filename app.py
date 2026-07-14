@@ -269,24 +269,35 @@ def get_tasks():
 @app.route('/api/tasks/upcoming', methods=['GET'])
 @requires_auth
 def get_upcoming_tasks():
-    """获取近5天内到期的任务（首页提醒用）"""
+    """获取近5个工作日内到期的任务和逾期任务（首页提醒用）"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
     now = datetime.now()
-    five_days_later = now + timedelta(days=5)
     
     cursor.execute('''
-        SELECT * FROM todo_tasks 
+        SELECT *,
+               CASE WHEN deadline < ? THEN 1 ELSE 0 END AS is_overdue,
+               CASE tag WHEN '紧急' THEN 1 WHEN '重要' THEN 2 WHEN '一般' THEN 3 ELSE 4 END AS tag_order
+        FROM todo_tasks 
         WHERE (is_deleted = 0 OR is_deleted IS NULL)
         AND status = '未完成' 
         AND deadline IS NOT NULL 
-        AND deadline >= ? 
-        AND deadline <= ?
+        AND (
+            (deadline >= ? AND deadline <= ?) OR
+            deadline < ?
+        )
         ORDER BY 
-            CASE tag WHEN '紧急' THEN 1 WHEN '重要' THEN 2 WHEN '一般' THEN 3 ELSE 4 END,
-            deadline ASC
-    ''', (now.strftime('%Y-%m-%d %H:%M:%S'), five_days_later.strftime('%Y-%m-%d %H:%M:%S')))
+            tag_order ASC,
+            is_overdue ASC,
+            CASE WHEN deadline < ? THEN deadline DESC ELSE deadline ASC END
+    ''', (
+        now.strftime('%Y-%m-%d %H:%M:%S'),
+        now.strftime('%Y-%m-%d %H:%M:%S'),
+        (now + timedelta(days=5)).strftime('%Y-%m-%d %H:%M:%S'),
+        now.strftime('%Y-%m-%d %H:%M:%S'),
+        now.strftime('%Y-%m-%d %H:%M:%S')
+    ))
     
     tasks = rows_to_list(cursor.fetchall())
     conn.close()

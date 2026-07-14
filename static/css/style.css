@@ -781,6 +781,7 @@ textarea.form-control {
 .text-right { text-align: right; }
 .text-muted { color: #718096; }
 .text-danger { color: #e53e3e; }
+.font-bold { font-weight: 700; }
 .text-success { color: #38a169; }
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
