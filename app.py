@@ -274,12 +274,10 @@ def get_upcoming_tasks():
     cursor = conn.cursor()
     
     now = datetime.now()
+    five_days_later = now + timedelta(days=5)
     
     cursor.execute('''
-        SELECT *,
-               CASE WHEN deadline < ? THEN 1 ELSE 0 END AS is_overdue,
-               CASE tag WHEN '紧急' THEN 1 WHEN '重要' THEN 2 WHEN '一般' THEN 3 ELSE 4 END AS tag_order
-        FROM todo_tasks 
+        SELECT * FROM todo_tasks 
         WHERE (is_deleted = 0 OR is_deleted IS NULL)
         AND status = '未完成' 
         AND deadline IS NOT NULL 
@@ -288,13 +286,12 @@ def get_upcoming_tasks():
             deadline < ?
         )
         ORDER BY 
-            tag_order ASC,
-            is_overdue ASC,
-            CASE WHEN deadline < ? THEN deadline DESC ELSE deadline ASC END
+            CASE tag WHEN '紧急' THEN 1 WHEN '重要' THEN 2 WHEN '一般' THEN 3 ELSE 4 END ASC,
+            CASE WHEN deadline < ? THEN 1 ELSE 0 END ASC,
+            deadline ASC
     ''', (
         now.strftime('%Y-%m-%d %H:%M:%S'),
-        now.strftime('%Y-%m-%d %H:%M:%S'),
-        (now + timedelta(days=5)).strftime('%Y-%m-%d %H:%M:%S'),
+        five_days_later.strftime('%Y-%m-%d %H:%M:%S'),
         now.strftime('%Y-%m-%d %H:%M:%S'),
         now.strftime('%Y-%m-%d %H:%M:%S')
     ))
