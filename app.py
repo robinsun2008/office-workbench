@@ -57,14 +57,15 @@ def allowed_file(filename):
 def save_uploaded_file(file, module_type, record_id):
     """保存上传的文件并记录到数据库"""
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        unique_filename = f"{timestamp}_{filename}"
+        original_filename = file.filename
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S_%f')
+        file_ext = os.path.splitext(file.filename)[1]
+        stored_filename = f"{timestamp}{file_ext}"
         
         module_dir = os.path.join(app.config['UPLOAD_FOLDER'], module_type)
         os.makedirs(module_dir, exist_ok=True)
         
-        file_path = os.path.join(module_dir, unique_filename)
+        file_path = os.path.join(module_dir, stored_filename)
         file.save(file_path)
         
         file_size = os.path.getsize(file_path)
@@ -74,14 +75,14 @@ def save_uploaded_file(file, module_type, record_id):
         cursor.execute('''
             INSERT INTO attachments (file_name, file_path, file_size, module_type, record_id)
             VALUES (?, ?, ?, ?, ?)
-        ''', (filename, file_path, file_size, module_type, record_id))
+        ''', (original_filename, file_path, file_size, module_type, record_id))
         conn.commit()
         attachment_id = cursor.lastrowid
         conn.close()
         
         return {
             'id': attachment_id,
-            'file_name': filename,
+            'file_name': original_filename,
             'file_size': file_size
         }
     return None
