@@ -355,7 +355,7 @@ const TodoModule = {
             container.innerHTML = result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this, event)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
@@ -678,7 +678,7 @@ const MemoModule = {
             container.innerHTML = result.data.length > 0 ? result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this, event)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
@@ -1054,7 +1054,7 @@ const FocusModule = {
             container.innerHTML = result.data.length > 0 ? result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this, event)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
@@ -1200,7 +1200,7 @@ const ReportModule = {
             container.innerHTML = result.data.length > 0 ? result.data.map(att => `
                 <div class="attachment-item">
                     <span>
-                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this)">${att.file_name}</span>
+                        <span class="attachment-name" onclick="startRenameAttachment(${att.id}, this, event)">${att.file_name}</span>
                         <span class="attachment-size">(${formatFileSize(att.file_size)})</span>
                     </span>
                     <span>
@@ -1701,7 +1701,9 @@ function downloadFile(attachmentId) {
 }
 
 // ==================== 重命名附件 ====================
-function startRenameAttachment(attachmentId, element) {
+function startRenameAttachment(attachmentId, element, event) {
+    if (event) event.stopPropagation();
+    
     const nameElement = element || document.querySelector(`.attachment-item[data-att-id="${attachmentId}"] .attachment-name`);
     if (!nameElement) return;
     
